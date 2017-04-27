@@ -52,6 +52,9 @@ UKF::UKF() {
 
   Hint: one or more values initialized above might be wildly off...
   */
+  
+  is_initialized_ = false;
+  previous_timestamp_ = 0;
 }
 
 UKF::~UKF() {}
@@ -61,6 +64,26 @@ UKF::~UKF() {}
  * either radar or laser.
  */
 void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
+  bool is_radar = meas_package.sensor_type_ == MeasurementPackage::RADAR;
+  double px = 0;
+  double py = 0;
+  if (!is_initialized_) {
+    if (is_radar) {
+      double rho = meas_package.raw_measurements_(0);
+      double phi = meas_package.raw_measurements_(1);
+      double rho_dot = meas_package.raw_measurements_(2);
+      
+      px = rho * cos(phi);
+      py = rho * sin(phi);      
+    } else {
+      px = meas_package.raw_measurements_(0);
+      py = meas_package.raw_measurements_(1);      
+    }
+    x_ << px, py, 0, 0, 0;
+    is_initialized_ = true;
+    previous_timestamp_ = meas_package.timestamp_;
+    return;
+  }
   /**
   TODO:
 
