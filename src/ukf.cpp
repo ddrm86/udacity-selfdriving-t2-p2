@@ -55,6 +55,14 @@ UKF::UKF() {
   
   is_initialized_ = false;
   previous_timestamp_ = 0;
+  n_x_ = 5;
+  n_aug_ = 7;
+  lambda_ = 3 - n_aug_;
+  P_ << 1, 0, 0, 0, 0,
+        0, 1, 0, 0, 0,
+        0, 0, 1, 0, 0,
+        0, 0, 0, 1, 0,
+        0, 0, 0, 0, 1;
 }
 
 UKF::~UKF() {}
@@ -77,7 +85,7 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
       py = rho * sin(phi);      
     } else {
       px = meas_package.raw_measurements_(0);
-      py = meas_package.raw_measurements_(1);      
+      py = meas_package.raw_measurements_(1);
     }
     x_ << px, py, 0, 0, 0;
     is_initialized_ = true;
@@ -104,6 +112,89 @@ void UKF::Prediction(double delta_t) {
   Complete this function! Estimate the object's location. Modify the state
   vector, x_. Predict sigma points, the state, and the state covariance matrix.
   */
+  VectorXd x_aug = VectorXd(n_aug_);
+  MatrixXd P_aug = MatrixXd(n_aug_, n_aug_);
+  MatrixXd Xsig_aug = MatrixXd(n_aug_, 2 * n_aug_ + 1);
+  
+  x_aug.fill(0.0);
+  x_aug.head(n_x_) = x_;
+  
+  P_aug.fill(0.0);
+  P_aug.topLeftCorner(n_x_, n_x_) = P_;
+  P_aug(n_x_, n_x_) = std_a_ * std_a_;
+  P_aug(n_x_+1, n_x_+1) = std_yawdd_ * std_yawdd_;
+  
+  MatrixXd L = P_aug.llt().matrixL();
+  
+  Xsig_aug.col(0) = x_aug;
+  for (int i=0; i < n_aug_; i++) {
+    Xsig_aug.col(i+1) = x_aug + sqrt(lambda_ + n_aug_) * L.col(i);
+    Xsig_aug.col(i+1+n_aug_) = x_aug - sqrt(lambda_ + n_aug_) * L.col(i);
+  }
+  
+  Xsig_pred_ = MatrixXd(n_x_, 2 * n_aug_ + 1);
+  
+  for (int i = 0; i < 2*n_aug_+1; i++) {
+    double px = Xsig_aug(0, i);
+    double py = Xsig_aug(1, i);
+    double v = Xsig_aug(2, i);
+    double yaw = Xsig_aug(3, i);
+    double yawd = Xsig_aug(4, i);
+    double nu_a = Xsig_aug(5, i);
+    double nu_yawdd = Xsig_aug(6, i);
+    
+    double px_p, py_p;
+    
+    if (fabs(yawd) > 0.001) {
+      px_p = px + v/yawd * (sin(yaw + yawd * delta_t) - sin(yaw));
+      py_p = py + v/yawd * (cos(yaw) - cos(yaw + yawd * delta_t));
+    } else {
+      px_p = px + v * delta_t * cos(yaw);
+      py_p = py + v * delta_t * sin(yaw);
+    }
+    
+    double v_p = v;
+    double yaw_p = yaw + yawd * delta_t;
+    double yawd_p = yawd;
+    
+    px_p = px_p + 0.5 * nu_a * delta_t * delta_t * cos(yaw);
+    py_p = py_p + 0.5 * nu_a * delta_t * delta_t * sin(yaw);
+    v_p = v_p + nu_a * delta_t;
+    yaw_p = yaw_p + 0.5 * nu_yawdd * delta_t * delta_t;
+    yawd_p = yawd_p + nu_yawdd * delta_t;
+    
+    Xsig_pred_(0, i) = px_p;
+    Xsig_pred_(1, i) = py_p;
+    Xsig_pred_(2, i) = v_p;
+    Xsig_pred_(3, i) = yaw_p;
+    Xsig_pred_(4, i) = yawd_p;
+  }
+  
+  
+  
+  VectorXd weights = VectorXd(2 * n_aug_ + 1);
+  
+  double weight_0 = lambda_ / (lambda_ + n_aug_);
+  weights(0) = weight_0;
+  for (int i=1; i<2*n_aug_+1; i++) {
+    double weight = 0.5 / (n_aug_ + lambda_);
+    weights(i) = weight;
+  }
+  
+  x_.fill(0.0);
+  for (int i=0; i<2*n_aug_+1; i++) {
+    x_ = x_ + weights(i) * Xsig_pred_.col(i);
+  }
+  
+  P_.fill(0.0);
+  for (int i=0; i<2*n_aug_+1; i++) {
+    VectorXd x_diff = Xsig_pred_.col(i) - x_;
+    while (x_diff(3) > M_PI)
+      x_diff(3) -= 2.*M_PI;
+    while (x_diff(3) < -M_PI)
+      x_diff(3) += 2.*M_PI;
+    P_ = P_ + weights(i) * x_diff * x_diff.transpose();
+  }
 }
 
 /**
