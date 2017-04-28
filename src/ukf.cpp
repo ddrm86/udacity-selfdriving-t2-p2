@@ -63,6 +63,13 @@ UKF::UKF() {
         0, 0, 1, 0, 0,
         0, 0, 0, 1, 0,
         0, 0, 0, 0, 1;
+  weights_ = VectorXd(2 * n_aug_ + 1);
+  double weight_0 = lambda_ / (lambda_ + n_aug_);
+  weights_(0) = weight_0;
+  for (int i=1; i<2*n_aug_+1; i++) {
+    double weight = 0.5 / (n_aug_ + lambda_);
+    weights_(i) = weight;
+  }
 }
 
 UKF::~UKF() {}
@@ -170,20 +177,9 @@ void UKF::Prediction(double delta_t) {
     Xsig_pred_(4, i) = yawd_p;
   }
   
-  
-  
-  VectorXd weights = VectorXd(2 * n_aug_ + 1);
-  
-  double weight_0 = lambda_ / (lambda_ + n_aug_);
-  weights(0) = weight_0;
-  for (int i=1; i<2*n_aug_+1; i++) {
-    double weight = 0.5 / (n_aug_ + lambda_);
-    weights(i) = weight;
-  }
-  
   x_.fill(0.0);
   for (int i=0; i<2*n_aug_+1; i++) {
-    x_ = x_ + weights(i) * Xsig_pred_.col(i);
+    x_ = x_ + weights_(i) * Xsig_pred_.col(i);
   }
   
   P_.fill(0.0);
@@ -193,7 +189,7 @@ void UKF::Prediction(double delta_t) {
       x_diff(3) -= 2.*M_PI;
     while (x_diff(3) < -M_PI)
       x_diff(3) += 2.*M_PI;
-    P_ = P_ + weights(i) * x_diff * x_diff.transpose();
+    P_ = P_ + weights_(i) * x_diff * x_diff.transpose();
   }
 }
 
@@ -225,4 +221,6 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
 
   You'll also need to calculate the radar NIS.
   */
+  int n_z = 3;
+  
 }
