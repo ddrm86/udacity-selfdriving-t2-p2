@@ -99,6 +99,12 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
     previous_timestamp_ = meas_package.timestamp_;
     return;
   }
+  float dt = (meas_package.timestamp_ - previous_timestamp_) / 1000000.0;
+	previous_timestamp_ = meas_package.timestamp_;
+	if (is_radar && use_radar_) {
+	  Prediction(dt);
+	  UpdateRadar(meas_package);
+	} else if (!is_radar && use_liser_) 
   /**
   TODO:
 
@@ -206,6 +212,56 @@ void UKF::UpdateLidar(MeasurementPackage meas_package) {
 
   You'll also need to calculate the lidar NIS.
   */
+  int n_z = 2;
+  MatrixXd Zsig = MatrixXd(n_z, 2 * n_aug_ + 1);
+
+  for (int i = 0; i < 2 * n_aug_ + 1; i++) {
+    Zsig(0,i) = Xsig_pred_(0,i);
+    Zsig(1,i) = Xsig_pred_(1,i);
+  }
+
+  VectorXd z_pred = VectorXd(n_z);
+  z_pred.fill(0.0);
+  for (int i=0; i < 2*n_aug_+1; i++) {
+      z_pred = z_pred + weights_(i) * Zsig.col(i);
+  }
+
+  MatrixXd S = MatrixXd(n_z, n_z);
+  S.fill(0.0);
+  for (int i = 0; i < 2 * n_aug_ + 1; i++) {
+    VectorXd z_diff = Zsig.col(i) - z_pred;
+    S = S + weights_(i) * z_diff * z_diff.transpose();
+  }
+
+  MatrixXd R = MatrixXd(n_z,n_z);
+  R <<    std_laspx_*std_laspx_, 0,
+          0, std_laspy_*std_laspy_;
+  S = S + R;
+
+  VectorXd z = VectorXd(n_z);
+  z << meas_package.raw_measurements_(0),
+       meas_package.raw_measurements_(1);
+  
+  MatrixXd Tc = MatrixXd(n_x_, n_z);
+
+  Tc.fill(0.0);
+  for (int i = 0; i < 2 * n_aug_ + 1; i++) {
+    VectorXd z_diff = Zsig.col(i) - z_pred;
+    VectorXd x_diff = Xsig_pred_.col(i) - x_;
+
+    Tc = Tc + weights_(i) * x_diff * z_diff.transpose();
+  }
+
+  //Kalman gain K;
+  MatrixXd K = Tc * S.inverse();
+
+  //residual
+  VectorXd z_diff = z - z_pred;
+
+
+  //update state mean and covariance matrix
+  x_ = x_ + K * z_diff;
+  P_ = P_ - K*S*K.transpose();  
 }
 
 /**
@@ -255,7 +311,6 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
     S = S + weights_(i) * z_diff * z_diff.transpose();
   }
 
-  //add measurement noise covariance matrix
   MatrixXd R = MatrixXd(n_z,n_z);
   R <<    std_radr_*std_radr_, 0, 0,
           0, std_radphi_*std_radphi_, 0,
