@@ -111,6 +111,14 @@ public:
   
 private:
   VectorXd InitWeights();
+  
+  MatrixXd GenerateSigmaPoints();
+  
+  void PredictSigmaPoints(double delta_t, MatrixXd &xsig_aug);
+  
+  double NormalizeAngle(double angle);
+  
+  void UpdatePredictedState();
 };
 
 #endif /* UKF_H */

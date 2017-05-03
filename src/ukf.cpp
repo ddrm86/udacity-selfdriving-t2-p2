@@ -110,18 +110,16 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
 	}
 }
 
-/**
- * Predicts sigma points, the state, and the state covariance matrix.
- * @param {double} delta_t the change in time (in seconds) between the last
- * measurement and this one.
- */
-void UKF::Prediction(double delta_t) {
-  /**
-  TODO:
+double UKF::NormalizeAngle(double angle) {
+  double norm_angle = angle;
+  while (norm_angle > M_PI)
+    norm_angle -= 2.*M_PI;
+  while (norm_angle < -M_PI)
+    norm_angle += 2.*M_PI;
+  return norm_angle;
+}
 
-  Complete this function! Estimate the object's location. Modify the state
-  vector, x_. Predict sigma points, the state, and the state covariance matrix.
-  */
+MatrixXd UKF::GenerateSigmaPoints() {
   VectorXd x_aug = VectorXd(n_aug_);
   MatrixXd P_aug = MatrixXd(n_aug_, n_aug_);
   MatrixXd Xsig_aug = MatrixXd(n_aug_, 2 * n_aug_ + 1);
@@ -141,17 +139,20 @@ void UKF::Prediction(double delta_t) {
     Xsig_aug.col(i+1) = x_aug + sqrt(lambda_ + n_aug_) * L.col(i);
     Xsig_aug.col(i+1+n_aug_) = x_aug - sqrt(lambda_ + n_aug_) * L.col(i);
   }
-  
+  return Xsig_aug;
+}
+
+void UKF::PredictSigmaPoints(double delta_t, MatrixXd &xsig_aug) {
   Xsig_pred_ = MatrixXd(n_x_, 2 * n_aug_ + 1);
   
   for (int i = 0; i < 2*n_aug_+1; i++) {
-    double px = Xsig_aug(0, i);
-    double py = Xsig_aug(1, i);
-    double v = Xsig_aug(2, i);
-    double yaw = Xsig_aug(3, i);
-    double yawd = Xsig_aug(4, i);
-    double nu_a = Xsig_aug(5, i);
-    double nu_yawdd = Xsig_aug(6, i);
+    double px = xsig_aug(0, i);
+    double py = xsig_aug(1, i);
+    double v = xsig_aug(2, i);
+    double yaw = xsig_aug(3, i);
+    double yawd = xsig_aug(4, i);
+    double nu_a = xsig_aug(5, i);
+    double nu_yawdd = xsig_aug(6, i);
     
     double px_p, py_p;
     
@@ -167,10 +168,10 @@ void UKF::Prediction(double delta_t) {
     double yaw_p = yaw + yawd * delta_t;
     double yawd_p = yawd;
     
-    px_p = px_p + 0.5 * nu_a * delta_t * delta_t * cos(yaw);
-    py_p = py_p + 0.5 * nu_a * delta_t * delta_t * sin(yaw);
+    px_p = px_p + 0.5 * nu_a * pow(delta_t, 2) * cos(yaw);
+    py_p = py_p + 0.5 * nu_a * pow(delta_t, 2) * sin(yaw);
     v_p = v_p + nu_a * delta_t;
-    yaw_p = yaw_p + 0.5 * nu_yawdd * delta_t * delta_t;
+    yaw_p = yaw_p + 0.5 * nu_yawdd * pow(delta_t, 2);
     yawd_p = yawd_p + nu_yawdd * delta_t;
     
     Xsig_pred_(0, i) = px_p;
@@ -179,7 +180,9 @@ void UKF::Prediction(double delta_t) {
     Xsig_pred_(3, i) = yaw_p;
     Xsig_pred_(4, i) = yawd_p;
   }
-  
+}
+
+void UKF::UpdatePredictedState() {
   x_.fill(0.0);
   for (int i=0; i<2*n_aug_+1; i++) {
     x_ = x_ + weights_(i) * Xsig_pred_.col(i);
@@ -188,12 +191,20 @@ void UKF::Prediction(double delta_t) {
   P_.fill(0.0);
   for (int i=0; i<2*n_aug_+1; i++) {
     VectorXd x_diff = Xsig_pred_.col(i) - x_;
-    while (x_diff(3) > M_PI)
-      x_diff(3) -= 2.*M_PI;
-    while (x_diff(3) < -M_PI)
-      x_diff(3) += 2.*M_PI;
+    x_diff(3) = NormalizeAngle(x_diff(3));
     P_ = P_ + weights_(i) * x_diff * x_diff.transpose();
   }
+}
+
+/**
+ * Predicts sigma points, the state, and the state covariance matrix.
+ * @param {double} delta_t the change in time (in seconds) between the last
+ * measurement and this one.
+ */
+void UKF::Prediction(double delta_t) {
+  MatrixXd Xsig_aug = GenerateSigmaPoints();  
+  PredictSigmaPoints(delta_t, Xsig_aug);  
+  UpdatePredictedState();
 }
 
 /**
