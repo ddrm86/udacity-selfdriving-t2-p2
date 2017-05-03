@@ -32,9 +32,6 @@ public:
   ///* predicted sigma points matrix
   MatrixXd Xsig_pred_;
 
-  ///* time when the state is true, in us
-  long long time_us_;
-
   ///* Process noise standard deviation longitudinal acceleration in m/s^2
   double std_a_;
 
@@ -111,6 +108,9 @@ public:
    * @param meas_package The measurement at k+1
    */
   void UpdateRadar(MeasurementPackage meas_package);
+  
+private:
+  VectorXd InitWeights();
 };
 
 #endif /* UKF_H */
