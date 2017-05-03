@@ -207,19 +207,25 @@ void UKF::Prediction(double delta_t) {
   UpdatePredictedState();
 }
 
+VectorXd UKF::GenerateZpred(int n_z, MatrixXd &zsigma) {
+  VectorXd z_pred = VectorXd(n_z);
+  z_pred.fill(0.0);
+  for (int i=0; i < 2*n_aug_+1; i++) {
+      z_pred = z_pred + weights_(i) * zsigma.col(i);
+  }
+  return z_pred;
+}
+
+double UKF::CalculateNIS(VectorXd z_diff, MatrixXd S) {
+  double NIS = z_diff.transpose() * S.inverse() * z_diff;
+  return NIS;
+}
+
 /**
  * Updates the state and the state covariance matrix using a laser measurement.
  * @param {MeasurementPackage} meas_package
  */
 void UKF::UpdateLidar(MeasurementPackage meas_package) {
-  /**
-  TODO:
-
-  Complete this function! Use lidar data to update the belief about the object's
-  position. Modify the state vector, x_, and covariance, P_.
-
-  You'll also need to calculate the lidar NIS.
-  */
   int n_z = 2;
   MatrixXd Zsig = MatrixXd(n_z, 2 * n_aug_ + 1);
 
@@ -228,11 +234,7 @@ void UKF::UpdateLidar(MeasurementPackage meas_package) {
     Zsig(1,i) = Xsig_pred_(1,i);
   }
 
-  VectorXd z_pred = VectorXd(n_z);
-  z_pred.fill(0.0);
-  for (int i=0; i < 2*n_aug_+1; i++) {
-      z_pred = z_pred + weights_(i) * Zsig.col(i);
-  }
+  VectorXd z_pred = GenerateZpred(n_z, Zsig);
 
   MatrixXd S = MatrixXd(n_z, n_z);
   S.fill(0.0);
@@ -241,9 +243,9 @@ void UKF::UpdateLidar(MeasurementPackage meas_package) {
     S = S + weights_(i) * z_diff * z_diff.transpose();
   }
 
-  MatrixXd R = MatrixXd(n_z,n_z);
-  R <<    std_laspx_*std_laspx_, 0,
-          0, std_laspy_*std_laspy_;
+  MatrixXd R = MatrixXd(n_z, n_z);
+  R <<    pow(std_laspx_, 2), 0,
+          0, pow(std_laspy_, 2);
   S = S + R;
 
   VectorXd z = VectorXd(n_z);
@@ -260,18 +262,12 @@ void UKF::UpdateLidar(MeasurementPackage meas_package) {
     Tc = Tc + weights_(i) * x_diff * z_diff.transpose();
   }
 
-  //Kalman gain K;
   MatrixXd K = Tc * S.inverse();
-
-  //residual
   VectorXd z_diff = z - z_pred;
-
-
-  //update state mean and covariance matrix
   x_ = x_ + K * z_diff;
   P_ = P_ - K*S*K.transpose();  
   
-  NIS_laser_ = z_diff.transpose() * S.inverse() * z_diff;
+  NIS_laser_ = CalculateNIS(z_diff, S);
 }
 
 /**

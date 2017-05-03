@@ -119,6 +119,10 @@ private:
   double NormalizeAngle(double angle);
   
   void UpdatePredictedState();
+  
+  VectorXd GenerateZpred(int n_z, MatrixXd &zsigma);
+  
+  double CalculateNIS(VectorXd z_diff, MatrixXd S);
 };
 
 #endif /* UKF_H */
