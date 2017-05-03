@@ -77,8 +77,8 @@ UKF::~UKF() {}
  */
 void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
   bool is_radar = meas_package.sensor_type_ == MeasurementPackage::RADAR;
-  double px = 0;
-  double py = 0;
+  double px, py;
+  
   if (!is_initialized_) {
     if (is_radar) {
       double rho = meas_package.raw_measurements_(0);
@@ -91,13 +91,16 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
       px = meas_package.raw_measurements_(0);
       py = meas_package.raw_measurements_(1);
     }
+    
     x_ << px, py, 0, 0, 0;
     is_initialized_ = true;
     previous_timestamp_ = meas_package.timestamp_;
     return;
   }
+  
   float dt = (meas_package.timestamp_ - previous_timestamp_) / 1000000.0;
 	previous_timestamp_ = meas_package.timestamp_;
+	
 	if (is_radar && use_radar_) {
 	  Prediction(dt);
 	  UpdateRadar(meas_package);
@@ -105,12 +108,6 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
 	  Prediction(dt);
 	  UpdateLidar(meas_package);
 	}
-  /**
-  TODO:
-
-  Complete this function! Make sure you switch between lidar and radar
-  measurements.
-  */
 }
 
 /**
