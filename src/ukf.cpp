@@ -270,20 +270,7 @@ void UKF::UpdateLidar(MeasurementPackage meas_package) {
   NIS_laser_ = CalculateNIS(z_diff, S);
 }
 
-/**
- * Updates the state and the state covariance matrix using a radar measurement.
- * @param {MeasurementPackage} meas_package
- */
-void UKF::UpdateRadar(MeasurementPackage meas_package) {
-  /**
-  TODO:
-
-  Complete this function! Use radar data to update the belief about the object's
-  position. Modify the state vector, x_, and covariance, P_.
-
-  You'll also need to calculate the radar NIS.
-  */
-  int n_z = 3;
+MatrixXd UKF::GenerateRadarZsigmas(int n_z) {
   MatrixXd Zsig = MatrixXd(n_z, 2 * n_aug_ + 1);
 
   for (int i = 0; i < 2 * n_aug_ + 1; i++) {
@@ -299,28 +286,31 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
     Zsig(1,i) = atan2(p_y, p_x);
     Zsig(2,i) = (p_x*v1 + p_y*v2) / sqrt(p_x * p_x + p_y * p_y);
   }
+  return Zsig;
+}
 
-  VectorXd z_pred = VectorXd(n_z);
-  z_pred.fill(0.0);
-  for (int i=0; i < 2*n_aug_+1; i++) {
-      z_pred = z_pred + weights_(i) * Zsig.col(i);
-  }
+/**
+ * Updates the state and the state covariance matrix using a radar measurement.
+ * @param {MeasurementPackage} meas_package
+ */
+void UKF::UpdateRadar(MeasurementPackage meas_package) {
+  int n_z = 3;
+  MatrixXd Zsig = GenerateRadarZsigmas(n_z);
+
+  VectorXd z_pred = GenerateZpred(n_z, Zsig);
 
   MatrixXd S = MatrixXd(n_z, n_z);
   S.fill(0.0);
   for (int i = 0; i < 2 * n_aug_ + 1; i++) {
     VectorXd z_diff = Zsig.col(i) - z_pred;
-
-    while (z_diff(1)> M_PI) z_diff(1)-=2.*M_PI;
-    while (z_diff(1)<-M_PI) z_diff(1)+=2.*M_PI;
-
+    z_diff(1) = NormalizeAngle(z_diff(1));
     S = S + weights_(i) * z_diff * z_diff.transpose();
   }
 
   MatrixXd R = MatrixXd(n_z,n_z);
-  R <<    std_radr_*std_radr_, 0, 0,
-          0, std_radphi_*std_radphi_, 0,
-          0, 0,std_radrd_*std_radrd_;
+  R <<    pow(std_radr_, 2), 0, 0,
+          0, pow(std_radphi_, 2), 0,
+          0, 0, pow(std_radrd_, 2);
   S = S + R;
 
   VectorXd z = VectorXd(n_z);
@@ -329,34 +319,21 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
        meas_package.raw_measurements_(2);
   
   MatrixXd Tc = MatrixXd(n_x_, n_z);
-
   Tc.fill(0.0);
   for (int i = 0; i < 2 * n_aug_ + 1; i++) {
     VectorXd z_diff = Zsig.col(i) - z_pred;
-    while (z_diff(1)> M_PI) z_diff(1)-=2.*M_PI;
-    while (z_diff(1)<-M_PI) z_diff(1)+=2.*M_PI;
-
+    z_diff(1) = NormalizeAngle(z_diff(1));
     VectorXd x_diff = Xsig_pred_.col(i) - x_;
-    while (x_diff(3)> M_PI) x_diff(3)-=2.*M_PI;
-    while (x_diff(3)<-M_PI) x_diff(3)+=2.*M_PI;
-
+    x_diff(3) = NormalizeAngle(x_diff(3));
     Tc = Tc + weights_(i) * x_diff * z_diff.transpose();
   }
 
-  //Kalman gain K;
   MatrixXd K = Tc * S.inverse();
-
-  //residual
   VectorXd z_diff = z - z_pred;
-
-  //angle normalization
-  while (z_diff(1)> M_PI) z_diff(1)-=2.*M_PI;
-  while (z_diff(1)<-M_PI) z_diff(1)+=2.*M_PI;
-
-  //update state mean and covariance matrix
+  z_diff(1) = NormalizeAngle(z_diff(1));
   x_ = x_ + K * z_diff;
   P_ = P_ - K*S*K.transpose();
   
-  NIS_radar_ = z_diff.transpose() * S.inverse() * z_diff;
+  NIS_radar_ = CalculateNIS(z_diff, S);
 }
 

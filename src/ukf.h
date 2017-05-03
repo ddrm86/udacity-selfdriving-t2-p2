@@ -123,6 +123,8 @@ private:
   VectorXd GenerateZpred(int n_z, MatrixXd &zsigma);
   
   double CalculateNIS(VectorXd z_diff, MatrixXd S);
+  
+  MatrixXd GenerateRadarZsigmas(int n_z);
 };
 
 #endif /* UKF_H */
